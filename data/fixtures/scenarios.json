@@ -1,0 +1,198 @@
+{
+  "scenarios": [
+    {
+      "id": "transient_issuer_failure",
+      "title": "Scenario 1: Transient Issuer Failure (₹4,999)",
+      "description": "Customer attempts ₹4,999 payment; HDFC issuer technical timeout occurs. Rail health monitor detects degradation, suppresses same-rail retry, proposes Standard Payment Link, and attributes ₹4,999 upon successful payment.",
+      "amount_inr": 4999.0,
+      "event_type": "payment.failed",
+      "method": "card",
+      "issuer": "hdfc",
+      "network": "visa",
+      "error": {
+        "code": "BAD_REQUEST_ERROR",
+        "source": "issuer",
+        "step": "payment_authorization",
+        "reason": "issuer_technical_error",
+        "description": "Bank servers timed out during authorization"
+      },
+      "intent_signals": {
+        "payment_attempt_started": true,
+        "payment_method_selected": true,
+        "checkout_details_completed": true,
+        "is_returning_customer": true,
+        "customer_session_active": true
+      },
+      "expected_action": "STANDARD_PAYMENT_LINK",
+      "expected_policy_verdict": "allowed"
+    },
+    {
+      "id": "expired_card",
+      "title": "Scenario 2: Expired Card Instrument",
+      "description": "Customer attempted payment using an expired credit card. Same-instrument retry is physically impossible; system presents an alternate payment link.",
+      "amount_inr": 2499.0,
+      "event_type": "payment.failed",
+      "method": "card",
+      "issuer": "icici",
+      "network": "mastercard",
+      "error": {
+        "code": "BAD_REQUEST_ERROR",
+        "source": "instrument",
+        "step": "payment_initiation",
+        "reason": "card_expired",
+        "description": "The card expiry date has passed"
+      },
+      "intent_signals": {
+        "payment_attempt_started": true,
+        "payment_method_selected": true,
+        "checkout_details_completed": true,
+        "is_returning_customer": false,
+        "customer_session_active": true
+      },
+      "expected_action": "STANDARD_PAYMENT_LINK",
+      "expected_policy_verdict": "allowed"
+    },
+    {
+      "id": "insufficient_funds",
+      "title": "Scenario 3: Insufficient Funds",
+      "description": "Customer card had insufficient balance. System schedules respectful retry and notifies customer to top up or switch account.",
+      "amount_inr": 8999.0,
+      "event_type": "payment.failed",
+      "method": "card",
+      "issuer": "sbi",
+      "network": "visa",
+      "error": {
+        "code": "BAD_REQUEST_ERROR",
+        "source": "customer",
+        "step": "payment_authorization",
+        "reason": "insufficient_funds",
+        "description": "Insufficient funds or credit limit exceeded"
+      },
+      "intent_signals": {
+        "payment_attempt_started": true,
+        "payment_method_selected": true,
+        "checkout_details_completed": true,
+        "is_returning_customer": true,
+        "customer_session_active": false
+      },
+      "expected_action": "CUSTOMER_RETRY",
+      "expected_policy_verdict": "allowed"
+    },
+    {
+      "id": "risk_policy_block",
+      "title": "Scenario 4: Risk / Fraud Block",
+      "description": "Transaction flagged by risk rules. Autonomous retries are strictly blocked and marked non-recoverable.",
+      "amount_inr": 15000.0,
+      "event_type": "payment.failed",
+      "method": "card",
+      "issuer": "unknown",
+      "network": "visa",
+      "error": {
+        "code": "BAD_REQUEST_ERROR",
+        "source": "business",
+        "step": "payment_initiation",
+        "reason": "risk_check_failed",
+        "description": "Transaction blocked due to elevated fraud risk score"
+      },
+      "intent_signals": {
+        "payment_attempt_started": true,
+        "payment_method_selected": false,
+        "checkout_details_completed": false,
+        "is_returning_customer": false,
+        "customer_session_active": false
+      },
+      "expected_action": "STOP",
+      "expected_policy_verdict": "allowed"
+    },
+    {
+      "id": "customer_opt_out_stop",
+      "title": "Scenario 5: Customer Opt-Out (STOP)",
+      "description": "Customer replies with 'STOP'. System immediately activates persistent communication shield and cancels all pending recovery jobs.",
+      "amount_inr": 1999.0,
+      "event_type": "customer.message",
+      "trigger_keyword": "STOP",
+      "method": "upi",
+      "issuer": "sbi",
+      "expected_action": "STOP",
+      "expected_policy_verdict": "blocked"
+    },
+    {
+      "id": "charged_but_uncertain",
+      "title": "Scenario 6: Charged-but-Uncertain Payment State",
+      "description": "Customer claims money deducted while webhook state is pending. Resolver halts all recovery charge actions to prevent duplicate charging.",
+      "amount_inr": 3499.0,
+      "event_type": "payment.pending",
+      "method": "upi",
+      "issuer": "hdfc",
+      "payment_state": "pending",
+      "expected_action": "WAIT",
+      "expected_policy_verdict": "blocked"
+    },
+    {
+      "id": "high_value_ambiguous",
+      "title": "Scenario 7: High-Value Transaction Escalation (₹35,000)",
+      "description": "Transaction value exceeds ₹25,000 threshold. System generates a multi-agent Diagnostic Brief and routes to Human Review Queue.",
+      "amount_inr": 35000.0,
+      "event_type": "payment.failed",
+      "method": "netbanking",
+      "issuer": "hdfc",
+      "error": {
+        "code": "GATEWAY_ERROR",
+        "source": "gateway",
+        "step": "payment_authorization",
+        "reason": "gateway_timeout",
+        "description": "High value corporate netbanking session timed out"
+      },
+      "expected_action": "ESCALATE_HUMAN",
+      "expected_policy_verdict": "escalate"
+    },
+    {
+      "id": "checkout_abandonment",
+      "title": "Scenario 8: Abandoned High-Intent Checkout",
+      "description": "Customer filled 90% checkout details but dropped off. System evaluates margin and recovery opportunity for bounded reminder.",
+      "amount_inr": 4500.0,
+      "event_type": "checkout.abandoned",
+      "method": "upi",
+      "issuer": "icici",
+      "intent_signals": {
+        "payment_attempt_started": false,
+        "payment_method_selected": true,
+        "checkout_details_completed": true,
+        "is_returning_customer": true,
+        "customer_session_active": false
+      },
+      "expected_action": "REMINDER",
+      "expected_policy_verdict": "allowed"
+    },
+    {
+      "id": "repeated_failures_exhausted",
+      "title": "Scenario 9: Repeated Failure Retry Budget Exhaustion",
+      "description": "Payment attempt fails for the 3rd consecutive time. Retry budget is exhausted; Policy Guard blocks autonomous retry and alerts team.",
+      "amount_inr": 6200.0,
+      "event_type": "payment.failed",
+      "attempts_count": 3,
+      "method": "card",
+      "issuer": "axis",
+      "error": {
+        "code": "BAD_REQUEST_ERROR",
+        "source": "issuer",
+        "step": "payment_authorization",
+        "reason": "issuer_technical_error",
+        "description": "Repeated authorization failure"
+      },
+      "expected_action": "ESCALATE_HUMAN",
+      "expected_policy_verdict": "escalate"
+    },
+    {
+      "id": "rail_degradation_spike",
+      "title": "Scenario 10: Rail Degradation Spike (SBI UPI Outage)",
+      "description": "Simulates 90% failure spike on SBI UPI. Rail health monitor marks rail as DEGRADED and shifts recovery recommendations to alternate healthy rails.",
+      "amount_inr": 1299.0,
+      "event_type": "rail.degrade",
+      "method": "upi",
+      "issuer": "sbi",
+      "expected_action": "STANDARD_PAYMENT_LINK",
+      "expected_policy_verdict": "allowed"
+    }
+  ]
+}
