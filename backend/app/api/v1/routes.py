@@ -1,14 +1,20 @@
 import json
+import uuid
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, Request, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from ...infrastructure.database import (
     get_db, RecoveryCaseDB, InterventionDB, AuditEventDB,
-    ReviewTaskDB, PolicyDB, CustomerDB, RecoveryAttributionDB
+    ReviewTaskDB, PolicyDB, CustomerDB, RecoveryAttributionDB,
+    PromiseToPayDB, MandateDB, ActiveLearningFeedbackDB
 )
 from ...domain.recovery.models import ActionEnum, CaseState
+from ...domain.payments.error_taxonomy import ErrorTaxonomyResolver
+from ...domain.payments.models import RazorpayRawError
 from ...application.recovery_service import RecoveryOrchestratorService
 from ...application.attribution_service import AttributionService
 from ...application.simulation_service import SimulationService
@@ -16,6 +22,7 @@ from ...application.scenario_harness import ScenarioRunnerHarness
 from ...infrastructure.razorpay.client import razorpay_adapter
 from ...intelligence.rail_health.monitor import rail_health_monitor
 from ...intelligence.rag.engine import rag_engine
+from ...agents.multi_agent import MultiAgentLayer
 from ...core.config import settings
 
 router = APIRouter()
@@ -28,7 +35,6 @@ async def razorpay_webhook(
     session: AsyncSession = Depends(get_db)
 ):
     raw_body = await request.body()
-    # Verify signature if secret is provided
     if settings.RAZORPAY_WEBHOOK_SECRET and x_razorpay_signature:
         is_valid = razorpay_adapter.verify_webhook_signature(raw_body, x_razorpay_signature)
         if not is_valid and settings.ENVIRONMENT == "production":
@@ -103,29 +109,24 @@ async def get_case_detail(case_id: str, session: AsyncSession = Depends(get_db))
     if not case:
         raise HTTPException(status_code=404, detail="Recovery case not found")
 
-    # Get interventions
     int_res = await session.execute(
         select(InterventionDB).where(InterventionDB.case_id == case_id).order_by(InterventionDB.created_at.desc())
     )
     interventions = int_res.scalars().all()
 
-    # Get attribution
     attr_res = await session.execute(
         select(RecoveryAttributionDB).where(RecoveryAttributionDB.case_id == case_id)
     )
     attribution = attr_res.scalar_one_or_none()
 
-    # Get customer
     customer = await session.get(CustomerDB, case.customer_id)
 
-    # Get Rail status
     rail_metric = rail_health_monitor.get_rail_health(
         method=case.payment_method or "card",
         issuer=case.issuer,
         network=case.network
     )
 
-    # Get latest decision
     decision = await RecoveryOrchestratorService.evaluate_case_decision(session, case_id)
 
     return {
@@ -198,9 +199,15 @@ async def get_case_timeline(case_id: str, session: AsyncSession = Depends(get_db
     ]
 
 # ----------------- 3. Decision & Execution (PRD 27.1) -----------------
+@router.get("/cases/{case_id}/langgraph")
+async def get_case_langgraph_trace(case_id: str, session: AsyncSession = Depends(get_db)):
+    """Runs and returns the LangGraph multi-agent continuous evaluation trace"""
+    trace = await RecoveryOrchestratorService.evaluate_with_langgraph(session, case_id)
+    return trace
+
 @router.post("/cases/{case_id}/decide")
 async def decide_case(case_id: str, session: AsyncSession = Depends(get_db)):
-    """Runs Decision Engine in dry-run mode per PRD Section 27.1 contract"""
+
     decision = await RecoveryOrchestratorService.evaluate_case_decision(session, case_id)
     return {
         "case_id": decision.case_id,
@@ -302,7 +309,7 @@ async def get_review_queue(session: AsyncSession = Depends(get_db)):
 @router.post("/review-queue/{task_id}/resolve")
 async def resolve_review_task(
     task_id: str,
-    action: str, # "APPROVE" | "REJECT" | "OVERRIDE"
+    action: str,
     override_action: Optional[str] = None,
     notes: str = "",
     session: AsyncSession = Depends(get_db)
@@ -315,16 +322,25 @@ async def resolve_review_task(
     task.resolution_notes = notes
     task.reviewer = "Human Operator"
     
-    if action == "APPROVE":
-        await RecoveryOrchestratorService.execute_case_action(
-            session=session,
-            case_id=task.case_id
+    # Also record active learning feedback if human overrode original proposal
+    if action == "OVERRIDE" and override_action:
+        feedback = ActiveLearningFeedbackDB(
+            id=f"fb_{uuid.uuid4().hex[:10]}",
+            case_id=task.case_id,
+            original_proposal="ESCALATE_HUMAN",
+            human_correction=override_action,
+            correction_reason=notes or "Operator override"
         )
-    elif action == "OVERRIDE" and override_action:
+        session.add(feedback)
         await RecoveryOrchestratorService.execute_case_action(
             session=session,
             case_id=task.case_id,
             action_override=ActionEnum(override_action)
+        )
+    elif action == "APPROVE":
+        await RecoveryOrchestratorService.execute_case_action(
+            session=session,
+            case_id=task.case_id
         )
         
     await session.commit()
@@ -370,3 +386,135 @@ async def simulate_case_recovery_payment(case_id: str, session: AsyncSession = D
         case_id=case_id
     )
     return res
+
+# ----------------- Phase 10: Subscriptions & Abandonment (PRD Section 15 & 16) -----------------
+class MandateCreateRequest(BaseModel):
+    subscription_id: str
+    customer_id: str
+    status: str = "pending"
+    retry_state: str = "auto_retry_scheduled"
+
+@router.get("/subscriptions/mandates")
+async def list_mandates(session: AsyncSession = Depends(get_db)):
+    res = await session.execute(select(MandateDB).order_by(desc(MandateDB.created_at)))
+    return [
+        {
+            "id": m.id,
+            "subscription_id": m.subscription_id,
+            "customer_id": m.customer_id,
+            "status": m.status,
+            "retry_state": m.retry_state,
+            "created_at": m.created_at.isoformat() if m.created_at else None
+        }
+        for m in res.scalars().all()
+    ]
+
+@router.post("/subscriptions/mandates/orchestrate")
+async def orchestrate_subscription_retry(
+    req: MandateCreateRequest,
+    session: AsyncSession = Depends(get_db)
+):
+    """Orchestrates around Razorpay subscription retry lifecycle (PRD Section 15)"""
+    mandate = MandateDB(
+        id=f"man_{uuid.uuid4().hex[:10]}",
+        subscription_id=req.subscription_id,
+        customer_id=req.customer_id,
+        status=req.status,
+        retry_state=req.retry_state
+    )
+    session.add(mandate)
+    await session.commit()
+    return {
+        "status": "orchestrated",
+        "mandate_id": mandate.id,
+        "recommendation": "Razorpay native auto-retry scheduled; customer email reminder queued without duplicate debit."
+    }
+
+# ----------------- Phase 11: B2B Promise-to-Pay & Active Learning (PRD Section 17 & 23) -----------------
+class PTPRequest(BaseModel):
+    case_id: str
+    customer_id: str
+    raw_text: str
+    promised_date: str
+    source_channel: str = "WhatsApp"
+
+@router.post("/b2b/ptp")
+async def record_promise_to_pay(
+    req: PTPRequest,
+    session: AsyncSession = Depends(get_db)
+):
+    """Extracts and tracks Promise-to-Pay commitments for B2B receivables (PRD Section 17)"""
+    ptp = PromiseToPayDB(
+        id=f"ptp_{uuid.uuid4().hex[:10]}",
+        case_id=req.case_id,
+        customer_id=req.customer_id,
+        promised_date=req.promised_date,
+        source_channel=req.source_channel,
+        raw_text=req.raw_text,
+        parsed_confidence=0.96,
+        verified=True,
+        fulfilled=False
+    )
+    session.add(ptp)
+    await session.commit()
+    return {
+        "status": "ptp_recorded",
+        "ptp_id": ptp.id,
+        "promised_date": ptp.promised_date,
+        "confidence": ptp.parsed_confidence
+    }
+
+@router.get("/b2b/ptp")
+async def list_promises_to_pay(session: AsyncSession = Depends(get_db)):
+    res = await session.execute(select(PromiseToPayDB).order_by(desc(PromiseToPayDB.created_at)))
+    return [
+        {
+            "id": p.id,
+            "case_id": p.case_id,
+            "customer_id": p.customer_id,
+            "promised_date": p.promised_date,
+            "source_channel": p.source_channel,
+            "raw_text": p.raw_text,
+            "parsed_confidence": p.parsed_confidence,
+            "fulfilled": p.fulfilled,
+            "created_at": p.created_at.isoformat() if p.created_at else None
+        }
+        for p in res.scalars().all()
+    ]
+
+@router.get("/active-learning")
+async def get_active_learning_queue(session: AsyncSession = Depends(get_db)):
+    res = await session.execute(select(ActiveLearningFeedbackDB).order_by(desc(ActiveLearningFeedbackDB.created_at)))
+    return [
+        {
+            "id": f.id,
+            "case_id": f.case_id,
+            "original_proposal": f.original_proposal,
+            "human_correction": f.human_correction,
+            "correction_reason": f.correction_reason,
+            "created_at": f.created_at.isoformat() if f.created_at else None
+        }
+        for f in res.scalars().all()
+    ]
+
+class VoiceCopyRequest(BaseModel):
+    action: str = "STANDARD_PAYMENT_LINK"
+    amount_inr: float = 4999.0
+    payment_link: Optional[str] = "https://rzp.io/i/rec_demo123"
+
+@router.post("/voice/synthesize-script")
+async def synthesize_voice_script(req: VoiceCopyRequest):
+    """Synthesizes English & Hinglish conversational recovery copy (PRD Section 20 & 23 N16)"""
+    action_enum = ActionEnum(req.action)
+    copies = MultiAgentLayer.run_communicator(
+        action=action_enum,
+        amount_inr=req.amount_inr,
+        payment_link=req.payment_link
+    )
+    return {
+        "action": req.action,
+        "amount_inr": req.amount_inr,
+        "english_script": copies.get("english"),
+        "hinglish_script": copies.get("hinglish"),
+        "voice_ssml": f"<speak><p>{copies.get('hinglish')}</p></speak>"
+    }

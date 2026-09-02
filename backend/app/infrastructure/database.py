@@ -11,6 +11,8 @@ from ..core.config import settings
 
 Base = declarative_base()
 
+# ----------------- PRD Section 28 Logical Schema -----------------
+
 class MerchantDB(Base):
     __tablename__ = "merchants"
     id = Column(String(64), primary_key=True)
@@ -26,6 +28,15 @@ class CustomerDB(Base):
     contact = Column(String(32), default="+919876543210")
     email = Column(String(128), default="customer@example.com")
     opt_out = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class OrderDB(Base):
+    __tablename__ = "orders"
+    id = Column(String(64), primary_key=True)
+    external_order_id = Column(String(64), unique=True, index=True)
+    customer_id = Column(String(64), index=True)
+    amount_paise = Column(Integer, nullable=False)
+    status = Column(String(32), default="created")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class EventDB(Base):
@@ -106,6 +117,65 @@ class PolicyDB(Base):
     is_shadow = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+class PolicyEvaluationDB(Base):
+    __tablename__ = "policy_evaluations"
+    id = Column(String(64), primary_key=True)
+    case_id = Column(String(64), index=True)
+    action = Column(String(64), nullable=False)
+    verdict = Column(String(32), nullable=False)
+    rules_json = Column(Text, nullable=False)
+    policy_version = Column(String(32), default="v1.0")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class ContactLogDB(Base):
+    __tablename__ = "contact_log"
+    id = Column(String(64), primary_key=True)
+    customer_id = Column(String(64), index=True)
+    case_id = Column(String(64), index=True)
+    channel = Column(String(32), default="sms") # "sms" | "whatsapp" | "email"
+    message_content = Column(Text, nullable=False)
+    sent_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class RailHealthWindowDB(Base):
+    __tablename__ = "rail_health_windows"
+    id = Column(String(64), primary_key=True)
+    dimension = Column(String(128), index=True) # e.g. "card:hdfc:visa"
+    window_start = Column(DateTime, nullable=False)
+    window_end = Column(DateTime, nullable=False)
+    total_txns = Column(Integer, default=0)
+    success_rate = Column(Float, default=1.0)
+    failure_rate = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class KnowledgeDocumentDB(Base):
+    __tablename__ = "knowledge_documents"
+    id = Column(String(64), primary_key=True)
+    source_type = Column(String(64), nullable=False)
+    version = Column(String(32), default="v1.0")
+    checksum = Column(String(64), nullable=False)
+    title = Column(String(256), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class KnowledgeChunkDB(Base):
+    __tablename__ = "knowledge_chunks"
+    id = Column(String(64), primary_key=True)
+    document_id = Column(String(64), index=True)
+    chunk_text = Column(Text, nullable=False)
+    embedding_vector = Column(Text, nullable=True) # JSON list or pgvector
+    category = Column(String(64), default="general")
+    metadata_json = Column(Text, nullable=True)
+
+class ModelRunDB(Base):
+    __tablename__ = "model_runs"
+    id = Column(String(64), primary_key=True)
+    model = Column(String(64), nullable=False)
+    version = Column(String(32), nullable=False)
+    provider = Column(String(64), nullable=False)
+    latency_ms = Column(Integer, default=0)
+    success = Column(Boolean, default=True)
+    json_valid = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 class RecoveryAttributionDB(Base):
     __tablename__ = "recovery_attribution"
     id = Column(String(64), primary_key=True)
@@ -140,6 +210,50 @@ class SimulationRunDB(Base):
     recovered_cases = Column(Integer, default=0)
     recovered_revenue = Column(Float, default=0.0)
     incremental_profit = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class SimulationCaseOutcomeDB(Base):
+    __tablename__ = "simulation_case_outcomes"
+    id = Column(String(64), primary_key=True)
+    run_id = Column(String(64), index=True)
+    case_id = Column(String(64), index=True)
+    action = Column(String(64), nullable=False)
+    outcome = Column(String(32), nullable=False) # "RECOVERED" | "FAILED" | "SUPPRESSED"
+    recovered_amount_inr = Column(Float, default=0.0)
+
+class PromiseToPayDB(Base):
+    """B2B Receivables & Promise-to-Pay tracking (PRD Section 17)"""
+    __tablename__ = "promises_to_pay"
+    id = Column(String(64), primary_key=True)
+    case_id = Column(String(64), index=True)
+    customer_id = Column(String(64), index=True)
+    promised_date = Column(String(32), nullable=False)
+    source_channel = Column(String(32), default="WhatsApp") # WhatsApp | email | voice | manual
+    raw_text = Column(Text, nullable=False)
+    parsed_confidence = Column(Float, default=0.95)
+    verified = Column(Boolean, default=True)
+    fulfilled = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class MandateDB(Base):
+    """Recurring subscription & auto-debit recovery context (PRD Section 15)"""
+    __tablename__ = "mandates"
+    id = Column(String(64), primary_key=True)
+    subscription_id = Column(String(64), index=True)
+    customer_id = Column(String(64), index=True)
+    status = Column(String(32), default="pending") # "active" | "pending" | "halted" | "cancelled"
+    retry_state = Column(String(32), default="auto_retry_scheduled")
+    next_retry_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class ActiveLearningFeedbackDB(Base):
+    """Human corrections captured for offline active learning (PRD Section 23 N15)"""
+    __tablename__ = "active_learning_feedback"
+    id = Column(String(64), primary_key=True)
+    case_id = Column(String(64), index=True)
+    original_proposal = Column(String(64), nullable=False)
+    human_correction = Column(String(64), nullable=False)
+    correction_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # Database connection setup

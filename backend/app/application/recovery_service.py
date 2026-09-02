@@ -26,6 +26,7 @@ from ..intelligence.scoring.intent import IntentScoringEngine
 from ..intelligence.rail_health.monitor import rail_health_monitor
 from ..intelligence.decisioning.nba_engine import NextBestActionEngine
 from ..intelligence.rag.engine import rag_engine
+from ..intelligence.agents.langgraph_workflow import recovery_langgraph_app
 from ..agents.multi_agent import MultiAgentLayer
 from ..policy.guard import PolicyGuard
 from ..infrastructure.database import (
@@ -38,7 +39,7 @@ from ..infrastructure.razorpay.client import razorpay_adapter
 class RecoveryOrchestratorService:
     """
     Core application service coordinating recovery case lifecycle, deterministic policy guards,
-    audit event recording, and Razorpay side-effects.
+    LangGraph multi-agent continuous evaluation loops, and Razorpay execution.
     """
 
     @staticmethod
@@ -71,12 +72,10 @@ class RecoveryOrchestratorService:
         Ingests and deduplicates inbound Razorpay webhook events per PRD Section 29.1.
         Returns: (is_new_event, message, case_id)
         """
-        # 1. Event Deduplication check
         existing_event = await session.get(EventDB, event_id)
         if existing_event:
             return False, "Duplicate event ignored", None
 
-        # 2. Persist raw event
         event_db = EventDB(
             event_id=event_id,
             event_type=event_type,
@@ -86,7 +85,6 @@ class RecoveryOrchestratorService:
         await session.flush()
 
         case_id = None
-        # Route to appropriate domain handler
         if event_type == "payment.failed":
             case_id = await cls._handle_payment_failed(session, event_id, payload)
         elif event_type in ["payment.captured", "payment_link.paid", "order.paid"]:
@@ -109,12 +107,10 @@ class RecoveryOrchestratorService:
         amount_paise = int(payment_entity.get("amount", 499900))
         method = payment_entity.get("method", "card")
         
-        # Extract customer info
         contact = payment_entity.get("contact", "+919876543210")
         email = payment_entity.get("email", "customer@example.com")
         customer_id = f"cust_{hashlib_short(contact)}"
 
-        # Check / Create customer
         customer_db = await session.get(CustomerDB, customer_id)
         if not customer_db:
             customer_db = CustomerDB(
@@ -127,7 +123,6 @@ class RecoveryOrchestratorService:
             session.add(customer_db)
             await session.flush()
 
-        # Extract Raw Error
         raw_err_data = payment_entity.get("error", {}) or {
             "code": payment_entity.get("error_code"),
             "description": payment_entity.get("error_description"),
@@ -136,21 +131,16 @@ class RecoveryOrchestratorService:
             "reason": payment_entity.get("error_reason")
         }
         raw_error = RazorpayRawError(**raw_err_data)
-        
-        # Step 1: Normalize failure
         normalized = ErrorTaxonomyResolver.normalize_error(raw_error)
 
-        # Step 2: Record rail attempt in Rail Health monitor
         issuer = payment_entity.get("issuer") or payment_entity.get("bank") or "hdfc"
         network = payment_entity.get("network") or "visa"
         rail_health_monitor.record_attempt(method=method, issuer=issuer, network=network, is_success=False)
 
-        # Step 3: Find or Create Recovery Case
         case_id = f"case_{order_id.replace('order_', '')}"
         case_db = await session.get(RecoveryCaseDB, case_id)
         
         if not case_db:
-            # Build Customer Context
             ctx = CustomerContext(
                 customer_id=customer_id,
                 payment_attempt_started=True,
@@ -193,7 +183,6 @@ class RecoveryOrchestratorService:
             case_db.latest_failure_reason = normalized.description
             case_db.latest_failure_code = normalized.reason_code
 
-        # Step 4: Record Payment Attempt
         attempt_db = PaymentAttemptDB(
             id=f"att_{uuid.uuid4().hex[:12]}",
             case_id=case_id,
@@ -224,6 +213,69 @@ class RecoveryOrchestratorService:
         return case_id
 
     @classmethod
+    async def evaluate_with_langgraph(
+        cls,
+        session: AsyncSession,
+        case_id: str
+    ) -> Dict[str, Any]:
+        """
+        Executes the LangGraph Multi-Agent Continuous Evaluation Loop
+        (Diagnostician -> Strategist -> Policy Critic -> Supervisor Evaluator -> Communicator)
+        """
+        case_db = await session.get(RecoveryCaseDB, case_id)
+        if not case_db:
+            raise ValueError(f"Recovery case {case_id} not found")
+
+        is_rail_degraded = rail_health_monitor.is_degraded(
+            method=case_db.payment_method or "card",
+            issuer=case_db.issuer,
+            network=case_db.network
+        )
+
+        initial_state = {
+            "case_id": case_db.id,
+            "amount_inr": case_db.amount_paise / 100.0,
+            "payment_method": case_db.payment_method or "card",
+            "issuer": case_db.issuer or "hdfc",
+            "error_code": case_db.latest_failure_code or "UNKNOWN_FAILURE",
+            "error_reason": case_db.latest_failure_reason or "Transaction authorization failure",
+            "intent_score": case_db.intent_score or 85.0,
+            "customer_opted_out": case_db.customer_opted_out or False,
+            "rail_degraded": is_rail_degraded,
+            "attempts_count": case_db.attempts_count or 1,
+            "contact_count_24h": case_db.contact_count_24h or 0,
+            "retrieved_evidence": [],
+            "diagnosis": {},
+            "strategy_proposal": {},
+            "critic_verdict": "APPROVED",
+            "critic_feedback": [],
+            "iteration": 0,
+            "max_iterations": 3,
+            "final_decision": {},
+            "customer_copy": {},
+            "agent_logs": []
+        }
+
+        # Run compiled LangGraph state graph
+        result_state = recovery_langgraph_app.invoke(initial_state)
+
+        await cls.record_audit_event(
+            session=session,
+            case_id=case_id,
+            event_type="LANGGRAPH_MULTI_AGENT_DECISION",
+            actor="langgraph-orchestrator",
+            payload={
+                "final_action": result_state["final_decision"].get("final_action"),
+                "iterations_count": result_state["final_decision"].get("iterations_count"),
+                "critic_verdict": result_state.get("critic_verdict"),
+                "supervisor_verdict": result_state["final_decision"].get("supervisor_verdict"),
+                "agent_logs_count": len(result_state.get("agent_logs", []))
+            }
+        )
+
+        return result_state
+
+    @classmethod
     async def evaluate_case_decision(
         cls,
         session: AsyncSession,
@@ -234,7 +286,6 @@ class RecoveryOrchestratorService:
         if not case_db:
             raise ValueError(f"Recovery case {case_id} not found")
 
-        # Reconstruct Domain Object
         case = RecoveryCase(
             id=case_db.id,
             merchant_id=case_db.merchant_id,
@@ -258,7 +309,6 @@ class RecoveryOrchestratorService:
             updated_at=case_db.updated_at.isoformat()
         )
 
-        # Construct failure representation
         raw_error = RazorpayRawError(
             code=case_db.latest_failure_code,
             reason=case_db.latest_failure_code,
@@ -315,7 +365,6 @@ class RecoveryOrchestratorService:
         decision = await cls.evaluate_case_decision(session, case_id)
         action_to_run = action_override or decision.recommended_action
         
-        # Re-check policy before execution under transaction
         policy = PolicyVersion(
             id="pol_default",
             version="v1.0",
@@ -323,7 +372,6 @@ class RecoveryOrchestratorService:
             updated_at=datetime.now(timezone.utc).isoformat()
         )
         
-        # Domain reconstruction for policy check
         case_obj = RecoveryCase(
             id=case_db.id,
             merchant_id=case_db.merchant_id,
@@ -354,7 +402,6 @@ class RecoveryOrchestratorService:
             policy_version=policy.version
         )
 
-        # Check existing execution with idempotency key
         stmt = select(InterventionDB).where(InterventionDB.idempotency_key == idempotency_key)
         res = await session.execute(stmt)
         existing_intervention = res.scalar_one_or_none()
@@ -396,7 +443,6 @@ class RecoveryOrchestratorService:
             raise ValueError(f"Action blocked by PolicyGuard: {guard_check.reason}")
 
         if guard_check.verdict == "escalate" or action_to_run == ActionEnum.ESCALATE_HUMAN:
-            # Create review task for human operator
             brief = MultiAgentLayer.generate_escalation_brief(
                 case=case_obj,
                 failure=ErrorTaxonomyResolver.normalize_error(RazorpayRawError(description=case_db.latest_failure_reason)),
@@ -432,7 +478,6 @@ class RecoveryOrchestratorService:
                 created_at=datetime.now(timezone.utc).isoformat()
             )
 
-        # Execute Side Effect (Razorpay Standard Payment Link or Retry notification)
         external_id = None
         payment_url = None
         msg_payload = MultiAgentLayer.run_communicator(
@@ -508,12 +553,10 @@ class RecoveryOrchestratorService:
 
     @classmethod
     async def process_opt_out(cls, session: AsyncSession, customer_id: str, trigger_word: str):
-        """Executes Section 14.2 STOP Workflow immediately"""
         customer = await session.get(CustomerDB, customer_id)
         if customer:
             customer.opt_out = True
             
-        # Update all active cases for this customer
         stmt = select(RecoveryCaseDB).where(
             RecoveryCaseDB.customer_id == customer_id,
             RecoveryCaseDB.state.notin_(["RECOVERED", "STOPPED", "EXPIRED"])
