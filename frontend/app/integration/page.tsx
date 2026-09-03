@@ -34,19 +34,19 @@ export default function IntegrationGuidePage() {
   return (
     <div className="space-y-8 animate-fadeIn pb-16">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        <div className="relative z-10">
-          <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              Enterprise Deployment Guide
+      <div className="border border-slate-800/90 bg-[#090d16] rounded-2xl p-6 sm:p-7 shadow-xl">
+        <div>
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="px-2 py-0.5 rounded font-mono text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              Enterprise Deployment Hub
             </span>
-            <span className="text-xs text-slate-400">Universal Merchant Architecture</span>
+            <span className="text-slate-400 text-[11px] font-mono">Universal Merchant Architecture</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white mt-2 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-1.5">
             How Any Company Can Implement RecoverOS
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl leading-relaxed">
-            RecoverOS is designed as a modular, failure-aware revenue recovery layer. Any business—from high-growth D2C brands and Shopify merchants to SaaS subscription platforms and enterprise B2B vendors—can deploy it within minutes across 4 distinct implementation tiers.
+          <p className="text-xs sm:text-sm text-slate-400 mt-0.5 max-w-[65ch] leading-relaxed">
+            Deploy RecoverOS as a modular, failure-aware recovery layer. From Shopify brands to enterprise B2B platforms, integrate within minutes across 4 implementation tiers.
           </p>
         </div>
       </div>
@@ -65,16 +65,16 @@ export default function IntegrationGuidePage() {
             <button
               key={tier.id}
               onClick={() => setActiveTab(tier.id as any)}
-              className={`p-4 rounded-2xl border text-left transition flex flex-col justify-between space-y-2 ${
+              className={`p-3.5 rounded-xl border text-left transition flex flex-col justify-between space-y-2 active:scale-[0.98] ${
                 isActive
-                  ? "bg-cyan-500/15 border-cyan-500 text-white shadow-lg shadow-cyan-500/10 ring-1 ring-cyan-500/50"
-                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
+                  ? "bg-slate-900 border-cyan-500/60 text-white shadow-sm ring-1 ring-cyan-500/20"
+                  : "bg-slate-950/80 border-slate-850 text-slate-400 hover:text-white hover:border-slate-700"
               }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? "text-cyan-400" : "text-slate-500"}`} />
+              <Icon className={`w-4 h-4 ${isActive ? "text-cyan-400" : "text-slate-500"}`} />
               <div>
                 <span className="text-xs font-bold block text-white">{tier.title}</span>
-                <span className="text-[10px] text-slate-400">{tier.subtitle}</span>
+                <span className="text-[10px] text-slate-400 font-mono">{tier.subtitle}</span>
               </div>
             </button>
           );
@@ -82,7 +82,7 @@ export default function IntegrationGuidePage() {
       </div>
 
       {/* Main Implementation Code & Instructions Panel */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+      <div className="bg-[#090d16] border border-slate-800/90 rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
         
         {/* TIER 1: ZERO-CODE WEBHOOK */}
         {activeTab === "webhook" && (
@@ -342,12 +342,12 @@ services:
       </div>
 
       {/* Interactive ROI & Revenue Impact Calculator */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <div className="bg-[#090d16] border border-slate-800/90 rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
         <div className="flex items-center space-x-2.5 border-b border-slate-800 pb-4">
-          <Calculator className="w-5 h-5 text-cyan-400" />
+          <Calculator className="w-4 h-4 text-cyan-400" />
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">Interactive Enterprise ROI & Revenue Impact Calculator</h2>
-            <p className="text-xs text-slate-400">See how much revenue your business will recover using the RecoverOS behavioral decisioning model.</p>
+            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">Interactive Enterprise ROI & Revenue Impact Calculator</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Model recovered revenue and merchant margin gain with RecoverOS.</p>
           </div>
         </div>
 
@@ -356,8 +356,8 @@ services:
           <div className="lg:col-span-6 space-y-5">
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Monthly Gross Transaction Volume (GMV)</span>
-                <span className="text-cyan-400 font-mono font-bold">
+                <span className="text-slate-300 font-medium">Monthly Gross Transaction Volume (GMV)</span>
+                <span className="text-cyan-400 font-mono font-bold tabular-nums">
                   {monthlyGmvLakhs >= 100 ? `₹${(monthlyGmvLakhs / 100).toFixed(1)} Crores` : `₹${monthlyGmvLakhs} Lakhs`}
                 </span>
               </div>
@@ -370,7 +370,7 @@ services:
                 onChange={(e) => setMonthlyGmvLakhs(Number(e.target.value))}
                 className="w-full accent-cyan-400 bg-slate-950 h-2 rounded-lg cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-500">
                 <span>₹10 Lakhs</span>
                 <span>₹1 Crore</span>
                 <span>₹10 Crores</span>
@@ -379,8 +379,8 @@ services:
 
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Checkout Failure / Abandonment Rate</span>
-                <span className="text-amber-400 font-mono font-bold">{failureRatePct}%</span>
+                <span className="text-slate-300 font-medium">Checkout Failure / Abandonment Rate</span>
+                <span className="text-amber-400 font-mono font-bold tabular-nums">{failureRatePct}%</span>
               </div>
               <input
                 type="range"
@@ -391,17 +391,17 @@ services:
                 onChange={(e) => setFailureRatePct(Number(e.target.value))}
                 className="w-full accent-amber-400 bg-slate-950 h-2 rounded-lg cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-500">
                 <span>8% (Low Friction)</span>
-                <span>18% (Industry Average)</span>
-                <span>35% (High Abandonment)</span>
+                <span>18% (Avg)</span>
+                <span>35% (High Drop)</span>
               </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-semibold">Merchant Gross Margin Rate</span>
-                <span className="text-emerald-400 font-mono font-bold">{merchantMarginPct}%</span>
+                <span className="text-slate-300 font-medium">Merchant Gross Margin Rate</span>
+                <span className="text-emerald-400 font-mono font-bold tabular-nums">{merchantMarginPct}%</span>
               </div>
               <input
                 type="range"
@@ -412,53 +412,53 @@ services:
                 onChange={(e) => setMerchantMarginPct(Number(e.target.value))}
                 className="w-full accent-emerald-400 bg-slate-950 h-2 rounded-lg cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-500">
                 <span>10% Low Margin</span>
                 <span>25% Standard D2C</span>
-                <span>60% High Margin SaaS</span>
+                <span>60% SaaS</span>
               </div>
             </div>
           </div>
 
           {/* Output Cards on Right 6 Cols */}
-          <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
-              <span className="text-[11px] text-slate-400 font-semibold uppercase block">Monthly Revenue at Risk</span>
-              <div className="text-xl font-black text-amber-400 font-mono">
+          <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Monthly Revenue at Risk</span>
+              <div className="text-xl font-bold text-amber-400 font-mono tabular-nums">
                 ₹{Math.round(monthlyRevenueAtRiskInr).toLocaleString()}
               </div>
               <span className="text-[10px] text-slate-500 block">Total dropped or failed payments</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-500/30 space-y-1">
-              <span className="text-[11px] text-cyan-300 font-semibold uppercase block">Recoverable Potential (81.2%)</span>
-              <div className="text-xl font-black text-cyan-400 font-mono">
+            <div className="p-4 rounded-xl bg-cyan-950/15 border border-cyan-500/25 space-y-1">
+              <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-wider block">Recoverable Potential (81.2%)</span>
+              <div className="text-xl font-bold text-cyan-400 font-mono tabular-nums">
                 ₹{Math.round(recoverableRevenueInr).toLocaleString()}
               </div>
-              <span className="text-[10px] text-cyan-300/80 block">Addressable with AI NBA policy</span>
+              <span className="text-[10px] text-cyan-300/70 block">Addressable with AI NBA policy</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 space-y-1">
-              <span className="text-[11px] text-emerald-300 font-semibold uppercase block">Net Captured Revenue</span>
-              <div className="text-2xl font-black text-emerald-400 font-mono">
+            <div className="p-4 rounded-xl bg-emerald-950/15 border border-emerald-500/25 space-y-1">
+              <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider block">Net Captured Revenue</span>
+              <div className="text-xl font-bold text-emerald-400 font-mono tabular-nums">
                 +₹{Math.round(recoveredRevenueInr).toLocaleString()}
               </div>
-              <span className="text-[10px] text-emerald-300/80 block">Consistently recovered per month</span>
+              <span className="text-[10px] text-emerald-300/70 block">Consistently recovered / month</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-blue-950/20 border border-blue-500/30 space-y-1">
-              <span className="text-[11px] text-blue-300 font-semibold uppercase block">Net Bottom-Line Profit</span>
-              <div className="text-2xl font-black text-white font-mono">
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <span className="text-[10px] font-mono text-slate-300 font-bold uppercase tracking-wider block">Net Bottom-Line Profit</span>
+              <div className="text-xl font-bold text-white font-mono tabular-nums">
                 +₹{Math.round(incrementalProfitInr).toLocaleString()}
               </div>
-              <span className="text-[10px] text-blue-300/80 block">Margin-protected cash gain</span>
+              <span className="text-[10px] text-slate-400 block">Margin-protected cash gain</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 3-Step Company Rollout Playbook */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
+      <div className="bg-[#090d16] border border-slate-800/90 rounded-2xl p-6 sm:p-7 shadow-xl space-y-4">
         <h2 className="text-base font-bold text-white flex items-center space-x-2">
           <Sparkles className="w-4 h-4 text-cyan-400" />
           <span>Recommended 3-Step Company Rollout Roadmap</span>

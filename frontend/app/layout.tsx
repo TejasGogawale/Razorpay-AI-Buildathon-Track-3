@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 
-const inter = Inter({ subsets: ["latin"] });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
-  title: "AI Revenue Recovery Orchestrator | Razorpay Buildathon",
+  title: "RecoverOS — AI Revenue Recovery Orchestrator | Razorpay Buildathon",
   description: "Next-best-action payment recovery decisioning engine with deterministic policy guards",
 };
 
@@ -17,13 +25,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} font-sans bg-[#070b12] text-slate-100 min-h-[100dvh] flex flex-col antialiased selection:bg-cyan-500/20 selection:text-cyan-300`}
+      >
         <Navbar />
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
-        <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
-          Razorpay AI Buildathon — Track 03: AI Revenue Recovery · Deterministic Policy & Bounded AI Architecture
+        <footer className="border-t border-slate-850 py-5 text-center text-xs text-slate-500 font-mono">
+          <span>Razorpay AI Buildathon · Track 03: AI Revenue Recovery · Deterministic Policy & Bounded AI</span>
         </footer>
       </body>
     </html>
