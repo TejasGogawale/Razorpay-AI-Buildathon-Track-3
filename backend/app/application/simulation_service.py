@@ -50,10 +50,52 @@ class SimulationService:
         futile_actions_suppressed = sum(1 for c in dataset if c["rail_degraded"] or not c["recoverable"] or c["opted_out"])
         policy_blocks_count = sum(1 for c in dataset if c["opted_out"] or not c["recoverable"])
 
+        total_recoverable_revenue = sum(c["amount_inr"] for c in dataset if c["recoverable"] and not c["opted_out"])
+        total_lost_revenue = sum(c["amount_inr"] for c in dataset if not c["recoverable"] or c["opted_out"])
+
+        # Customer behavioral pattern breakdown for simulation
+        behavioral_breakdown = {}
+        for c in dataset:
+            arch = c.get("customer_archetype") or c.get("customer_psychology_archetype") or "Loyal Repeat Buyer"
+            if arch not in behavioral_breakdown:
+                behavioral_breakdown[arch] = {
+                    "archetype": arch,
+                    "total_volume_inr": 0.0,
+                    "recoverable_volume_inr": 0.0,
+                    "lost_volume_inr": 0.0,
+                    "ai_recovered_volume_inr": 0.0,
+                    "cases_count": 0
+                }
+            amt = c["amount_inr"]
+            behavioral_breakdown[arch]["total_volume_inr"] += amt
+            behavioral_breakdown[arch]["cases_count"] += 1
+            if c["recoverable"] and not c["opted_out"]:
+                behavioral_breakdown[arch]["recoverable_volume_inr"] += amt
+            else:
+                behavioral_breakdown[arch]["lost_volume_inr"] += amt
+            if c["simulated_outcomes"]["AI_POLICY"]:
+                behavioral_breakdown[arch]["ai_recovered_volume_inr"] += amt
+
+        behavioral_list = []
+        for arch, d in behavioral_breakdown.items():
+            tot = max(1.0, d["total_volume_inr"])
+            d["recoverable_pct"] = round((d["recoverable_volume_inr"] / tot) * 100, 1)
+            d["lost_pct"] = round((d["lost_volume_inr"] / tot) * 100, 1)
+            d["ai_recovery_pct"] = round((d["ai_recovered_volume_inr"] / tot) * 100, 1)
+            d["total_volume_inr"] = round(d["total_volume_inr"], 2)
+            d["recoverable_volume_inr"] = round(d["recoverable_volume_inr"], 2)
+            d["lost_volume_inr"] = round(d["lost_volume_inr"], 2)
+            d["ai_recovered_volume_inr"] = round(d["ai_recovered_volume_inr"], 2)
+            behavioral_list.append(d)
+        behavioral_list.sort(key=lambda x: x["total_volume_inr"], reverse=True)
+
         results = {
             "run_id": run_id,
             "sample_size": total_cases,
             "revenue_at_risk_inr": round(total_revenue_at_risk, 2),
+            "recoverable_revenue_inr": round(total_recoverable_revenue, 2),
+            "lost_revenue_inr": round(total_lost_revenue, 2),
+            "customer_behavioral_patterns": behavioral_list,
             "arms": {
                 "no_action": {
                     "name": "No Action (Organic)",

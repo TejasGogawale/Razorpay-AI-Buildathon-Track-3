@@ -1,0 +1,53 @@
+{
+  "model_type": "RandomForestClassifier",
+  "sample_size": 20000,
+  "train_samples": 16000,
+  "test_samples": 4000,
+  "roc_auc": 0.7537,
+  "precision": 0.6153,
+  "recall": 0.9989,
+  "f1_score": 0.7615,
+  "brier_score": 0.1738,
+  "top_features": [
+    {
+      "feature": "amount_inr",
+      "importance": 0.2791
+    },
+    {
+      "feature": "failure_code_risk_check_failed",
+      "importance": 0.211
+    },
+    {
+      "feature": "failure_code_mandate_revoked",
+      "importance": 0.2092
+    },
+    {
+      "feature": "opted_out",
+      "importance": 0.0603
+    },
+    {
+      "feature": "time_since_failure_minutes",
+      "importance": 0.0358
+    },
+    {
+      "feature": "customer_ltv",
+      "importance": 0.0352
+    },
+    {
+      "feature": "previous_purchase_count",
+      "importance": 0.0208
+    },
+    {
+      "feature": "previous_payment_success_rate",
+      "importance": 0.0123
+    },
+    {
+      "feature": "checkout_progress",
+      "importance": 0.0119
+    },
+    {
+      "feature": "failure_code_insufficient_funds",
+      "importance": 0.0087
+    }
+  ]
+}

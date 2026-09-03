@@ -9,7 +9,7 @@ class LLMProviderFactory:
     """
 
     @staticmethod
-    def get_chat_model(temperature: float = 0.1) -> Optional[Any]:
+    def get_chat_model(temperature: float = 0.1, model_type: str = "primary", **kwargs) -> Optional[Any]:
         # 1. Try Google Gemini (Free Tier)
         gemini_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if gemini_key:
