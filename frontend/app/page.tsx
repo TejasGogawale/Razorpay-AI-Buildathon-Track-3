@@ -175,12 +175,23 @@ export default function OverviewPage() {
 
   const activeArchetype = behavioralData.archetypes[selectedArchetypeIndex] || behavioralData.archetypes[0];
 
-  const archetypeChartData = behavioralData.archetypes.map((a: any) => ({
-    name: a.archetype.replace(" & ", " & ").replace("Friction-Averse ", ""),
-    recoverable: Math.round(a.recoverable_volume_inr / 100000) / 10,
-    lost: Math.round(a.lost_volume_inr / 100000) / 10,
-    recovered: Math.round(a.recovered_volume_inr / 100000) / 10,
-  }));
+  const archetypeChartData = behavioralData.archetypes.map((a: any) => {
+    let shortLabel = a.archetype;
+    if (a.archetype.includes("Loyal")) shortLabel = "Loyal Buyer";
+    else if (a.archetype.includes("Window")) shortLabel = "Window Shopper";
+    else if (a.archetype.includes("1-Tap") || a.archetype.includes("Speed")) shortLabel = "1-Tap Speed";
+    else if (a.archetype.includes("Anxious") || a.archetype.includes("Security")) shortLabel = "Security Anxious";
+    else if (a.archetype.includes("First-Time") || a.archetype.includes("Skeptical")) shortLabel = "First-Time";
+    else if (a.archetype.includes("Deal") || a.archetype.includes("Hunter")) shortLabel = "Deal Hunter";
+
+    return {
+      name: shortLabel,
+      fullName: a.archetype,
+      recoverable: Math.round(a.recoverable_volume_inr / 100000) / 10,
+      lost: Math.round(a.lost_volume_inr / 100000) / 10,
+      recovered: Math.round(a.recovered_volume_inr / 100000) / 10,
+    };
+  });
 
   return (
     <div className="space-y-7 animate-fadeIn pb-14">
@@ -487,28 +498,41 @@ export default function OverviewPage() {
             <span className="text-[10px] font-mono text-slate-500">1 Lakh = ₹100,000</span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={archetypeChartData} margin={{ top: 10, right: 10, left: -10, bottom: 25 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
+              <BarChart data={archetypeChartData} margin={{ top: 10, right: 15, left: 10, bottom: 45 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} vertical={false} />
                 <XAxis 
                   dataKey="name" 
-                  stroke="#64748b" 
-                  fontSize={10} 
+                  stroke="#94a3b8" 
+                  fontSize={11} 
                   interval={0} 
-                  angle={-15} 
+                  angle={-20} 
                   textAnchor="end" 
+                  dx={-4}
+                  dy={6}
                   tickLine={false}
                 />
-                <YAxis stroke="#64748b" fontSize={10} tickFormatter={(val) => `₹${val}L`} tickLine={false} />
+                <YAxis 
+                  stroke="#94a3b8" 
+                  fontSize={11} 
+                  tickFormatter={(val) => `₹${val}L`} 
+                  tickLine={false} 
+                  width={55}
+                />
                 <Tooltip 
                   contentStyle={{ backgroundColor: "#070b12", borderColor: "#334155", borderRadius: "10px", fontSize: "11px" }}
+                  labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || _}
                   formatter={(val: any) => [`₹${val} Lakhs`, ""]}
                 />
-                <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "12px" }} />
-                <Bar dataKey="recoverable" name="Recoverable Revenue" fill="#06b6d4" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="lost" name="Permanently Lost Revenue" fill="#f43f5e" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="recovered" name="Already Captured" fill="#10b981" radius={[3, 3, 0, 0]} />
+                <Legend 
+                  verticalAlign="top" 
+                  align="right" 
+                  wrapperStyle={{ fontSize: "11px", paddingBottom: "16px" }} 
+                />
+                <Bar dataKey="recoverable" name="Recoverable Revenue" fill="#06b6d4" radius={[3, 3, 0, 0]} barSize={14} />
+                <Bar dataKey="lost" name="Permanently Lost Revenue" fill="#f43f5e" radius={[3, 3, 0, 0]} barSize={14} />
+                <Bar dataKey="recovered" name="Already Captured" fill="#10b981" radius={[3, 3, 0, 0]} barSize={14} />
               </BarChart>
             </ResponsiveContainer>
           </div>
